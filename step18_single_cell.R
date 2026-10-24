@@ -41,14 +41,13 @@ Macrodata <- AddModuleScore(
 # 规范列名
 colnames(Macrodata@meta.data)[colnames(Macrodata@meta.data) == "Module_RiskScore1"] <- "Module_RiskScore"
 
-# 3. 提取 15 个 PDAC 样本按中位数降序排列，强制锁定为 7 High vs 8 Low
+# 3. 提取 15 个 PDAC 样本按中位数降序排列
 pdac_mask <- grepl("^PDAC", Macrodata$orig.ident)
 pdac_meta <- Macrodata@meta.data[pdac_mask, ]
 
 pdac_sample_medians <- aggregate(Module_RiskScore ~ orig.ident, data = pdac_meta, FUN = median)
 pdac_sample_medians <- pdac_sample_medians[order(pdac_sample_medians$Module_RiskScore, decreasing = TRUE), ]
 
-# 强制切分为 前 7 例 (High) 与 后 8 例 (Low)
 high_samples <- pdac_sample_medians$orig.ident[1:7]
 low_samples  <- pdac_sample_medians$orig.ident[8:15]
 
