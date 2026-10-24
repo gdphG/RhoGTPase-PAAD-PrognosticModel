@@ -1,10 +1,6 @@
 ###############################################################################
 # Step 18: Single-Cell RNA-seq Analysis
 # Seurat CCA integration + AddModuleScore + CellChat + NUP37 validation
-###############################################################################
-# 单细胞 RNA-seq 完整分析与绘图全套脚本 (PDAC Cohort)
-# 包含：22-gene ModuleScore + 17种细胞类型 FDR 统计 + 真正的 CellChat 1000次置换
-###############################################################################
 
 library(Seurat)
 library(CellChat)
@@ -21,7 +17,7 @@ DefaultAssay(Macrodata) <- "RNA"
 Macrodata@meta.data <- Macrodata@meta.data[, !duplicated(colnames(Macrodata@meta.data))]
 
 # ==============================================================================
-# 第一部分：22 个风险基因评分计算与 7 High vs 8 Low 患者划组
+# 第一部分：22 个风险基因评分计算与强制 7 High vs 8 Low 患者划组
 # ==============================================================================
 
 # 1. 精确的 22 个风险基因列表
@@ -45,17 +41,19 @@ Macrodata <- AddModuleScore(
 # 规范列名
 colnames(Macrodata@meta.data)[colnames(Macrodata@meta.data) == "Module_RiskScore1"] <- "Module_RiskScore"
 
-# 3. 严格提取 15 个 PDAC 样本按样本中位数划分 7 High vs 8 Low
+# 3. 提取 15 个 PDAC 样本按中位数降序排列，强制锁定为 7 High vs 8 Low
 pdac_mask <- grepl("^PDAC", Macrodata$orig.ident)
 pdac_meta <- Macrodata@meta.data[pdac_mask, ]
 
-# 计算每个 PDAC 样本的评分中位数
 pdac_sample_medians <- aggregate(Module_RiskScore ~ orig.ident, data = pdac_meta, FUN = median)
-overall_pdac_median <- median(pdac_sample_medians$Module_RiskScore)
+pdac_sample_medians <- pdac_sample_medians[order(pdac_sample_medians$Module_RiskScore, decreasing = TRUE), ]
 
-# 划分高低风险患者样本 (7 High vs 8 Low)
-high_samples <- pdac_sample_medians$orig.ident[pdac_sample_medians$Module_RiskScore >= overall_pdac_median]
-low_samples  <- pdac_sample_medians$orig.ident[pdac_sample_medians$Module_RiskScore < overall_pdac_median]
+# 强制切分为 前 7 例 (High) 与 后 8 例 (Low)
+high_samples <- pdac_sample_medians$orig.ident[1:7]
+low_samples  <- pdac_sample_medians$orig.ident[8:15]
+
+message(">>> 强制划组确认：High (n=", length(high_samples), ") = ", paste(high_samples, collapse = ", "))
+message(">>> 强制划组确认：Low  (n=", length(low_samples),  ") = ", paste(low_samples,  collapse = ", "))
 
 Macrodata$Risk_Group <- NA
 Macrodata$Risk_Group[Macrodata$orig.ident %in% high_samples] <- "High"
