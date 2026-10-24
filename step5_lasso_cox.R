@@ -91,7 +91,8 @@ cat("  - 1 年期平均乐观度 (Optimism):", round(mean_optimism, 3), "\n")
 cat("  - 1 年期校正后 AUC (Optimism-Corrected AUC):", round(corrected_auc, 3), "\n")
 
 # ==============================================================================
-# 3. Permutation Test 置换检验 (N = 500, 经验 P 值加 1 修正)
+# ==============================================================================
+# 3. Permutation Test 置换检验 (N = 500, 经验 P 值加 1 修正) - 已修复逻辑 BUG
 # ==============================================================================
 cat("\n[2/2] 正在运行 Permutation Test 验证信号非随机 (N = 500)...\n")
 N_perm <- 500
@@ -99,18 +100,27 @@ perm_aucs <- numeric(N_perm)
 
 set.seed(1234)
 for (i in 1:N_perm) {
+  # 打乱样本索引，彻底打破特征 X (v1) 与结局 Y (v2) 的关联
   perm_idx <- sample(1:nrow(mydata))
-  perm_v2  <- v2[perm_idx]
   
+  # 成对同步打乱生存时间与转归状态，确保配对完整性
+  perm_time  <- mydata$survival_time[perm_idx]
+  perm_delta <- mydata$status[perm_idx]
+  perm_v2    <- Surv(perm_time, perm_delta)
+  
+  # 使用打乱后的结局拟合 LASSO-Cox
   cv_perm <- try(cv.glmnet(v1, perm_v2, family = "cox", alpha = 1, nfolds = 5), silent = TRUE)
   if (inherits(cv_perm, "try-error")) {
     perm_aucs[i] <- 0.5
     next
   }
   
+  # 预测风险得分
   pred_perm <- predict(cv_perm, newx = v1, s = "lambda.min", type = "link")
-  roc_perm  <- timeROC(T = mydata$survival_time, delta = mydata$status[perm_idx], 
-                       marker = pred_perm, cause = 1, times = 365)
+  
+  # 【关键修复】：timeROC 中的 T 与 delta 必须与拟合使用的 perm_v2 完全对齐！
+  roc_perm  <- timeROC(T = perm_time, delta = perm_delta, 
+                       marker = pred_perm, cause = 1, times = 365, iid = FALSE)
   perm_aucs[i] <- roc_perm$AUC[2]
 }
 
